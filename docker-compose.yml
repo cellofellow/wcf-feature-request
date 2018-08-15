@@ -1,0 +1,10 @@
+version: '3'
+services:
+  web:
+    build: .
+    volumes:
+      - .:/app
+    ports:
+      - 5000:5000
+    environment:
+      SQLALCHEMY_DATABASE_URI: 'sqlite:///db.sqlite3'
