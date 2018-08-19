@@ -1,6 +1,6 @@
 import typing as t
 
-from flask import Flask, request, url_for, Response
+from flask import Flask, request, url_for, jsonify
 from sqlalchemy.exc import IntegrityError
 
 app = Flask(__name__)
@@ -8,8 +8,9 @@ app.config.from_object('default_settings')
 
 
 @app.route('/')
-def root():
-    return '<h1>Hello World</h1>'
+def index():
+    return app.send_static_file('index.html')
+
 
 
 # SQLAlchemy Models
@@ -414,4 +415,4 @@ spec.add_path(resource=ProductAreaResource, api=api)
 
 @app.route('/v1')
 def swagger():
-    return Response(spec.to_yaml(), mimetype='text/plain')
+    return jsonify(spec.to_dict())
