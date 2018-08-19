@@ -1,6 +1,6 @@
 import typing as t
 
-from flask import Flask, request, url_for, jsonify
+from flask import Flask, request, url_for, Response
 from sqlalchemy.exc import IntegrityError
 
 app = Flask(__name__)
@@ -85,6 +85,10 @@ class FeatureRequest(db.Model):
     def id(self) -> int:
         return self.featurerequest_id
 
+    @property
+    def url(self) -> str:
+        return url_for('featurerequestresource', id=self.id, _external=True)
+
     def handle_unique_constraints(self) -> t.Optional[str]:
         '''
         Each FeatureRequest must have a unique priority number for each client.
@@ -125,9 +129,8 @@ class FeatureRequest(db.Model):
             return {'errors': [err]}, 409
 
         db.session.commit()
-        import schema
         self = self.query.get(self.id)
-        result = schema.FeatureRequestSchema().dump(self)
+        result = FeatureRequestSchema().dump(self)
         return {'featurerequest': result}, 200
 
 
@@ -159,7 +162,7 @@ def drop_all():
 # These use the Marshmallow schemas
 
 from marshmallow import ValidationError
-from schema import FeatureRequestSchema
+from schema import FeatureRequestSchema, ProductAreaSchema, ClientSchema
 from flask_restful import Api, Resource
 
 
@@ -172,10 +175,47 @@ class FeatureRequestListResource(Resource):
     schema = FeatureRequestSchema
 
     def get(self):
+        '''List all FeatureRequests
+            ---
+            description: list all feature requests
+            responses:
+              200:
+                description: list all feature requests
+                schema:
+                  featurerequests:
+                    type: array
+                    items:
+                      $ref: '#/definitions/FeatureRequest'
+        '''
         reqs = self.schema(many=True).dump(FeatureRequest.query.all())
         return {'featurerequests': reqs}
 
     def post(self):
+        '''Create new FeatureRequest
+            ---
+            description: create new feature request
+            responses:
+              200:
+                description: successfully created featurerequest
+                schema:
+                  featurerequest:
+                    type: array
+                    items:
+                      $ref: '#/definitions/FeatureRequest'
+                  message:
+                    type: string
+              400:
+                description: unreadable input
+                schema:
+                  message:
+                     type: string
+              422:
+                description: invalid input
+                schema:
+                  errors:
+                    type: array
+                    items: string
+        '''
         json_data = request.get_json()
         if not json_data:
             return {'message': 'Empty input received'}, 400
@@ -199,19 +239,65 @@ class FeatureRequestResource(Resource):
     '''
     schema = FeatureRequestSchema
 
-    def get(self, pk):
-        req = FeatureRequest.query.get(pk)
+    def get(self, id):
+        '''A FeatureRequest
+            ---
+            description: A FeatureRequest
+            responses:
+              200:
+                description: A FeatureRequest
+                schema:
+                  featurerequest:
+                    $ref: '#/definitions/FeatureRequest'
+              404:
+                description: FeatureRequest with id not found
+                schema:
+                  message:
+                    type: string
+        '''
+        req = FeatureRequest.query.get(id)
         if req is None:
-            return {'message': f'FeatureRequest {pk} could not be found.'}, 404
+            return {'message': f'FeatureRequest {id} could not be found.'}, 404
         req_data = self.schema().dump(req)
         return {'featurerequest': req_data}, 200
 
-    def put(self, pk, partial=False):
-        req = FeatureRequest.query.get(pk)
+    def put(self, id, partial=False):
+        '''Modifiy a FeatureRequest
+            ---
+            description: Modify a FeatureRequest
+            parameters:
+            - in: body
+              name: body
+              required: True
+              schema:
+                $ref: '#/definitions/FeatureRequest'
+            responses:
+              200:
+                description: successfully created featurerequest
+                schema:
+                  featurerequest:
+                    type: array
+                    items:
+                      $ref: '#/definitions/FeatureRequest'
+                  message:
+                    type: string
+              400:
+                description: unreadable input
+                schema:
+                  message:
+                     type: string
+              422:
+                description: invalid input
+                schema:
+                  errors:
+                    type: array
+                    items: string
+        '''
+        req = FeatureRequest.query.get(id)
         if req is None:
-            return {'message': f'FeatureRequest {pk} could not be found.'}, 404
+            return {'message': f'FeatureRequest {id} could not be found.'}, 404
         json_data = request.get_json()
-        json_data['id'] = pk
+        json_data['id'] = id
         try:
             req = self.schema().load(json_data, partial=partial)
         except ValidationError as err:
@@ -222,30 +308,110 @@ class FeatureRequestResource(Resource):
         response['message'] = 'Modified FeatureRequest'
         return response, status
 
-    def patch(self, pk):
-        return self.put(pk, partial=True)
+    def patch(self, id):
+        '''Partially modifiy a FeatureRequest
+            ---
+            description: Modify a FeatureRequest partial
+            parameters:
+            - in: body
+              name: body
+              required: True
+              schema:
+                $ref: '#/definitions/FeatureRequest'
+            responses:
+              200:
+                description: successfully created featurerequest
+                schema:
+                  featurerequest:
+                    type: array
+                    items:
+                      $ref: '#/definitions/FeatureRequest'
+                  message:
+                    type: string
+              400:
+                description: unreadable input
+                schema:
+                  message:
+                     type: string
+              422:
+                description: invalid input
+                schema:
+                  errors:
+                    type: array
+                    items: string
+        '''
+        return self.put(id, partial=True)
 api.add_resource(FeatureRequestResource,
-                 '/v1/featurerequest/<pk>')
+                 '/v1/featurerequest/<id>')
 
 
-# No need for "resources" for simple read-only listings.
-@app.route('/v1/productarea')
-def list_productareas():
-    areas = ProductArea.query.all()
-    return {'productareas': [{'id': a.id, 'name': a.name} for a in areas]}
+class ProductAreaResource(Resource):
+    schema = ProductAreaSchema
+
+    def get(self):
+        '''List all ProductAreas
+            ---
+            description: list all product areas
+            responses:
+              200:
+                description: list all product areas
+                schema:
+                  productareas:
+                    type: array
+                    items:
+                      $ref: '#/definitions/ProductArea'
+        '''
+        areas = ProductArea.query.all()
+        return {'productareas': [{'id': a.id, 'name': a.name} for a in areas]}
+api.add_resource(ProductAreaResource,
+                 '/v1/productarea')
 
 
-@app.route('/v1/client')
-def list_clients():
-    clients = Client.query.all()
-    return {'clients': [{'id': c.id, 'name': c.name} for c in clients]}
+class ClientResource(Resource):
+    schema = ClientSchema
+
+    def get(self):
+        '''List all Clients
+            ---
+            description: list all clients
+            responses:
+              200:
+                description: list all clients
+                schema:
+                  clients:
+                    type: array
+                    items:
+                      $ref: '#/definitions/Client'
+        '''
+        clients = Client.query.all()
+        return {'clients': [{'id': c.id, 'name': c.name} for c in clients]}
+api.add_resource(ClientResource,
+                 '/v1/client')
 
 
-# Simple root for the API allowing some kind of discoverability.
+
+# Swagger API
+from apispec import APISpec
+from apispec.ext.marshmallow import MarshmallowPlugin
+
+# Create an APISpec
+spec = APISpec(
+    title='Feature Requests',
+    version='0.1.0b1',
+    openapi_version='2.0',
+    plugins=[
+        MarshmallowPlugin(),
+        'apispec_flask_restful',
+    ],
+)
+spec.definition('FeatureRequest', schema=FeatureRequestSchema)
+spec.definition('Client', schema=ClientSchema)
+spec.definition('ProductArea', schema=ProductAreaSchema)
+spec.add_path(resource=FeatureRequestListResource, api=api)
+spec.add_path(resource=FeatureRequestResource, api=api)
+spec.add_path(resource=ClientResource, api=api)
+spec.add_path(resource=ProductAreaResource, api=api)
+
 @app.route('/v1')
-def api_root():
-    return jsonify({'resources': [
-        url_for('featurerequestlistresource', _external=True),
-        url_for('list_productareas', _external=True),
-        url_for('list_clients', _external=True),
-    ]})
+def swagger():
+    return Response(spec.to_yaml(), mimetype='text/plain')

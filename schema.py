@@ -1,10 +1,9 @@
-from flask import url_for
 from marshmallow import Schema, fields, post_load, validates
 
 
 class FeatureRequestSchema(Schema):
     id = fields.Int()
-    url = fields.Method(serialize='resource_url')
+    url = fields.URL(dump_only=True)
     title = fields.Str(required=True)
     description = fields.Str(required=True)
     priority = fields.Int(required=True, validate=lambda v: v > 0)
@@ -44,7 +43,12 @@ class FeatureRequestSchema(Schema):
             req = FeatureRequest(**data)
         return req
 
-    def resource_url(self, obj):
-        return url_for('featurerequestresource',
-                       pk=obj.id,
-                       _external=True)
+
+class ClientSchema(Schema):
+    id = fields.Int()
+    name = fields.Str()
+
+
+class ProductAreaSchema(Schema):
+    id = fields.Int()
+    name = fields.Str()
