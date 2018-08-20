@@ -3,7 +3,6 @@ from marshmallow import Schema, fields, post_load, validates
 
 class FeatureRequestSchema(Schema):
     id = fields.Int()
-    url = fields.URL(dump_only=True)
     title = fields.Str(required=True)
     description = fields.Str(required=True)
     priority = fields.Int(required=True, validate=lambda v: v > 0)

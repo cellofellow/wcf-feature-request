@@ -1,6 +1,6 @@
 import typing as t
 
-from flask import Flask, request, url_for, jsonify
+from flask import Flask, request, jsonify
 from sqlalchemy.exc import IntegrityError
 
 app = Flask(__name__)
@@ -85,10 +85,6 @@ class FeatureRequest(db.Model):
     @property
     def id(self) -> int:
         return self.featurerequest_id
-
-    @property
-    def url(self) -> str:
-        return url_for('featurerequestresource', id=self.id, _external=True)
 
     def handle_unique_constraints(self) -> t.Optional[str]:
         '''
@@ -234,118 +230,6 @@ api.add_resource(FeatureRequestListResource,
                  '/v1/featurerequest')
 
 
-class FeatureRequestResource(Resource):
-    '''
-    API resource to read, update, and delete a FeatureRequest
-    '''
-    schema = FeatureRequestSchema
-
-    def get(self, id):
-        '''A FeatureRequest
-            ---
-            description: A FeatureRequest
-            responses:
-              200:
-                description: A FeatureRequest
-                schema:
-                  featurerequest:
-                    $ref: '#/definitions/FeatureRequest'
-              404:
-                description: FeatureRequest with id not found
-                schema:
-                  message:
-                    type: string
-        '''
-        req = FeatureRequest.query.get(id)
-        if req is None:
-            return {'message': f'FeatureRequest {id} could not be found.'}, 404
-        req_data = self.schema().dump(req)
-        return {'featurerequest': req_data}, 200
-
-    def put(self, id, partial=False):
-        '''Modifiy a FeatureRequest
-            ---
-            description: Modify a FeatureRequest
-            parameters:
-            - in: body
-              name: body
-              required: True
-              schema:
-                $ref: '#/definitions/FeatureRequest'
-            responses:
-              200:
-                description: successfully created featurerequest
-                schema:
-                  featurerequest:
-                    type: array
-                    items:
-                      $ref: '#/definitions/FeatureRequest'
-                  message:
-                    type: string
-              400:
-                description: unreadable input
-                schema:
-                  message:
-                     type: string
-              422:
-                description: invalid input
-                schema:
-                  errors:
-                    type: array
-                    items: string
-        '''
-        req = FeatureRequest.query.get(id)
-        if req is None:
-            return {'message': f'FeatureRequest {id} could not be found.'}, 404
-        json_data = request.get_json()
-        json_data['id'] = id
-        try:
-            req = self.schema().load(json_data, partial=partial)
-        except ValidationError as err:
-            return {'errors': err.messages}, 422
-        response, status = req.save()
-        if status != 200:
-            return response, status
-        response['message'] = 'Modified FeatureRequest'
-        return response, status
-
-    def patch(self, id):
-        '''Partially modifiy a FeatureRequest
-            ---
-            description: Modify a FeatureRequest partial
-            parameters:
-            - in: body
-              name: body
-              required: True
-              schema:
-                $ref: '#/definitions/FeatureRequest'
-            responses:
-              200:
-                description: successfully created featurerequest
-                schema:
-                  featurerequest:
-                    type: array
-                    items:
-                      $ref: '#/definitions/FeatureRequest'
-                  message:
-                    type: string
-              400:
-                description: unreadable input
-                schema:
-                  message:
-                     type: string
-              422:
-                description: invalid input
-                schema:
-                  errors:
-                    type: array
-                    items: string
-        '''
-        return self.put(id, partial=True)
-api.add_resource(FeatureRequestResource,
-                 '/v1/featurerequest/<id>')
-
-
 class ProductAreaResource(Resource):
     schema = ProductAreaSchema
 
@@ -409,7 +293,6 @@ spec.definition('FeatureRequest', schema=FeatureRequestSchema)
 spec.definition('Client', schema=ClientSchema)
 spec.definition('ProductArea', schema=ProductAreaSchema)
 spec.add_path(resource=FeatureRequestListResource, api=api)
-spec.add_path(resource=FeatureRequestResource, api=api)
 spec.add_path(resource=ClientResource, api=api)
 spec.add_path(resource=ProductAreaResource, api=api)
 
