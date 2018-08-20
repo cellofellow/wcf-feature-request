@@ -4,19 +4,82 @@
     <script src='/static/js/swagger-client.js' type='text/javascript'></script>
     <script src='/static/js/knockout.js'></script>
     <script>
+     let specUrl = '/v1';
 
-     var specUrl = '/v1';
-     //SwaggerClient.http.withCredentials = true; // this activates CORS, if necessary
+     class CreateRequestViewModel {
+         constructor() {
+             this.priority = 100;
+             this.title = '';
+             this.description = '';
+             this.client = {};
+             this.productarea = {};
+         }
+
+         forApi() {
+             return {
+                priority: this.priority,
+                title: this.title,
+                description: this.description,
+                client_id: this.client.id,
+                productarea_id: this.productarea.id,
+             };
+         }
+     }
+
+     class ViewModel {
+         constructor(swaggerApi) {
+             this._api = swaggerApi;
+             this.newRequest = ko.observable(new CreateRequestViewModel());
+         }
+
+         async fetch() {
+             let response;
+             response = await this._api.get_v1_featurerequest();
+             if (response.ok) {
+                 this.featureRequests = ko.observable(response.obj.featurerequests);
+             } else {
+                 throw new Exception(response);
+             }
+
+             response = await this._api.get_v1_client();
+             if (response.ok) {
+                 this.clients = response.obj.clients;
+             } else {
+                 throw new Exception(response);
+             }
+
+             response = await this._api.get_v1_productarea();
+             if (response.ok) {
+                 this.productAreas = response.obj.productareas;
+             } else {
+                 throw new Exception(response);
+             }
+
+             return this;
+         }
+
+
+         async saveNewRequest() {
+             let response = this._api.post_v1_featurerequest(this.newRequest().forApi());
+             if (response.ok) {
+                 let response = await this._api.get_v1_featurerequest();
+                 if (response.ok) {
+                     this.featureRequests = ko.observable(response.obj.featurerequests);
+                 } else {
+                     throw new Exception(response);
+                 }
+             } else {
+                 throw new Exception(response);
+             }
+             this.newRequest = ko.observable(new CreateRequestViewModel());
+         }
+
+     }
 
      async function swaggerin () {
          const swaggerClient = await new SwaggerClient(specUrl);
-         let response = await swaggerClient.apis.default.get_v1_featurerequest();
-         let allFeatureRequests
-         if (response.ok) {
-             allFeatureRequests = response.obj.featurerequests;
-         }
-         ko.applyBindings({'featureRequests': allFeatureRequests});
-         console.log(allFeatureRequests);
+         const viewModel = new ViewModel(swaggerClient.apis.default);
+         ko.applyBindings(await viewModel.fetch());
      }
 
      swaggerin().then(() => 'swag')
@@ -38,6 +101,14 @@
             </tr>
         </tbody>
     </table>
+
+    <h2>Add New</h2>
+    <label>Priority <input name="priority" type="number" min=1 data-bind="value: newRequest().priority"></label>
+    <label>Title <input name="title" type="text" data-bind="value: newRequest().title"></label>
+    <label>Description <input name="description" type="text" data-bind="value: newRequest().description"></label>
+    <label>Client <select name="client" data-bind="options: clients, optionsText: 'name', value: newRequest().client, optionsCaption: 'Choose...'"></select></label>
+    <label>Product Area <select name="productArea" data-bind="options: productAreas, optionsText: 'name', value: newRequest().productarea, optionsCaption: 'Choose...'" ></select></label>
+    <button data-bind="click: saveNewRequest()" >Save</button>
 
 </body>
 </html>
