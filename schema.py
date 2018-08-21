@@ -14,8 +14,7 @@ class FeatureRequestSchema(Schema):
 
     @validates('client_id')
     def _client_id_exists(self, value):
-        from app import db
-        from model import Client
+        from app import db, Client
         q = (Client.query
              .filter(Client.client_id == value)
              .exists())

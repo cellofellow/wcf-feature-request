@@ -2,9 +2,18 @@ import typing as t
 
 from flask import Flask, request, jsonify
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.engine import Engine
+from sqlalchemy import event
 
 app = Flask(__name__)
 app.config.from_object('default_settings')
+
+
+@event.listens_for(Engine, 'connect')
+def set_sqlite_pragma(conn, record):
+    cursor = conn.cursor()
+    cursor.execute('PRAGMA foreign_keys=ON')
+    cursor.close()
 
 
 @app.route('/')
@@ -57,10 +66,7 @@ class FeatureRequest(db.Model):
     featurerequest_id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String, unique=True, nullable=False)
     description = db.Column(db.String, nullable=False)
-    priority = db.Column(db.Integer,
-                         db.CheckConstraint('priority > 0',
-                                            name='positive_priority'),
-                         nullable=False)
+    priority = db.Column(db.Integer, nullable=False)
     target_date = db.Column(db.Date)
 
     # References
@@ -112,10 +118,16 @@ class FeatureRequest(db.Model):
             )
             if is_priority_client:
                 db.session.rollback()
-                (db.session.query(FeatureRequest)
+                # Two-step priority shift. Can't defer unique constraints in
+                # SQLite otherwise it could be 1-step.
+                (db.session.query(cls)
                  .filter(cls.client_id == self.client_id)
                  .filter(cls.priority >= self.priority)
-                 .update({cls.priority: cls.priority + 1}))
+                 .update({cls.priority: (cls.priority + 1) * -1}))
+                (db.session.query(cls)
+                 .filter(cls.priority < 0)
+                 .update({cls.priority: cls.priority * -1}))
+                db.session.add(self)
             if '.title' in reason:
                 return 'Unique title required'
 
@@ -174,6 +186,8 @@ class FeatureRequestListResource(Resource):
     def get(self):
         '''List all FeatureRequests
             ---
+            tags: [featureRequest]
+            operationId: listFeatureRequests
             description: list all feature requests
             responses:
               200:
@@ -190,7 +204,17 @@ class FeatureRequestListResource(Resource):
     def post(self):
         '''Create new FeatureRequest
             ---
+            tags: [featureRequest]
+            operationId: createFeatureRequest
             description: create new feature request
+            consumes:
+            - application/json
+            parameters:
+            - in: body
+              name: body
+              description: FeatureRequest object to add
+              required: true
+              schema: {$ref: '#/definitions/FeatureRequest'}
             responses:
               200:
                 description: successfully created featurerequest
@@ -236,6 +260,8 @@ class ProductAreaResource(Resource):
     def get(self):
         '''List all ProductAreas
             ---
+            tags: [productArea]
+            operationId: listProductAreas
             description: list all product areas
             responses:
               200:
@@ -258,6 +284,8 @@ class ClientResource(Resource):
     def get(self):
         '''List all Clients
             ---
+            tags: [client]
+            operationId: listClients
             description: list all clients
             responses:
               200:
@@ -289,6 +317,9 @@ spec = APISpec(
         'apispec_flask_restful',
     ],
 )
+spec.add_tag({'name': 'featureRequest'})
+spec.add_tag({'name': 'productArea'})
+spec.add_tag({'name': 'client'})
 spec.definition('FeatureRequest', schema=FeatureRequestSchema)
 spec.definition('Client', schema=ClientSchema)
 spec.definition('ProductArea', schema=ProductAreaSchema)
@@ -299,3 +330,7 @@ spec.add_path(resource=ProductAreaResource, api=api)
 @app.route('/v1')
 def swagger():
     return jsonify(spec.to_dict())
+
+@app.cli.command('swagger')
+def show_swagger_yaml():
+    print(spec.to_yaml())

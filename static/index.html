@@ -27,63 +27,71 @@
      }
 
      class ViewModel {
-         constructor(swaggerApi) {
-             this._api = swaggerApi;
+         constructor(swaggerClient) {
+             this._swagger = swaggerClient;
              this.newRequest = ko.observable(new CreateRequestViewModel());
+             this.errors = {
+                 uniqueTitle: ko.observable(false),
+                 unknown: ko.observable(null),
+             };
          }
 
          async fetch() {
              let response;
-             response = await this._api.get_v1_featurerequest();
-             if (response.ok) {
-                 this.featureRequests = ko.observable(response.obj.featurerequests);
-             } else {
-                 throw new Exception(response);
-             }
+             response = await this._swagger.apis.featureRequest.listFeatureRequests();
+             this.featureRequests = ko.observableArray(response.obj.featurerequests);
 
-             response = await this._api.get_v1_client();
-             if (response.ok) {
-                 this.clients = response.obj.clients;
-             } else {
-                 throw new Exception(response);
-             }
+             response = await this._swagger.apis.client.listClients();
+             this.clients = response.obj.clients;
 
-             response = await this._api.get_v1_productarea();
-             if (response.ok) {
-                 this.productAreas = response.obj.productareas;
-             } else {
-                 throw new Exception(response);
-             }
-
+             response = await this._swagger.apis.productArea.listProductAreas();
+             this.productAreas = response.obj.productareas;
              return this;
          }
 
 
          async saveNewRequest() {
-             let response = this._api.post_v1_featurerequest(this.newRequest().forApi());
-             if (response.ok) {
-                 let response = await this._api.get_v1_featurerequest();
-                 if (response.ok) {
-                     this.featureRequests = ko.observable(response.obj.featurerequests);
-                 } else {
-                     throw new Exception(response);
+             this.errors.uniqueTitle(false);
+             let body = this.newRequest().forApi();
+             try {
+                await this._swagger.apis.featureRequest.createFeatureRequest({body: body});
+             } catch (err) {
+                 switch (err.message) {
+                 case "CONFLICT":
+                     this.errors.uniqueTitle(true);
+                     break;
+                 default:
+                     alert(err.message);
+                     this.errors.unknown(err.message);
                  }
-             } else {
-                 throw new Exception(response);
+                 return;
              }
-             this.newRequest = ko.observable(new CreateRequestViewModel());
+             // We must reload the entirety of the Feature Request list because
+             // requiring a unique priority may have changed >1 item.
+             // Could be mitigated by more advanced logic on server that returns
+             // list of all modified items, but that's overkill for now.
+             let response = await this._swagger.apis.featureRequest.listFeatureRequests();
+             this.featureRequests(response.obj.featurerequests);
+             this.newRequest(new CreateRequestViewModel());
          }
 
      }
 
      async function swaggerin () {
          const swaggerClient = await new SwaggerClient(specUrl);
-         const viewModel = new ViewModel(swaggerClient.apis.default);
+         window.swag = swaggerClient;
+         const viewModel = new ViewModel(swaggerClient);
          ko.applyBindings(await viewModel.fetch());
      }
 
      swaggerin().then(() => 'swag')
     </script>
+
+    <style>
+     span.error {
+         color: red;
+     }
+    </style>
 </head>
 <body>
     <h1>Feature Requests</h1>
@@ -103,12 +111,14 @@
     </table>
 
     <h2>Add New</h2>
-    <label>Priority <input name="priority" type="number" min=1 data-bind="value: newRequest().priority"></label>
-    <label>Title <input name="title" type="text" data-bind="value: newRequest().title"></label>
-    <label>Description <input name="description" type="text" data-bind="value: newRequest().description"></label>
-    <label>Client <select name="client" data-bind="options: clients, optionsText: 'name', value: newRequest().client, optionsCaption: 'Choose...'"></select></label>
-    <label>Product Area <select name="productArea" data-bind="options: productAreas, optionsText: 'name', value: newRequest().productarea, optionsCaption: 'Choose...'" ></select></label>
-    <button data-bind="click: saveNewRequest()" >Save</button>
+    <form data-bind="submit: saveNewRequest" target="#nowhere" method="post">
+    <label>Priority <input name="priority" required type="number" min=1 data-bind="value: newRequest().priority"></label>
+    <label>Title <input name="title" required type="text" data-bind="value: newRequest().title" placeholder="Must be unique" ><span class="error" data-bind="visible: errors.uniqueTitle()" >Unique title required.</span></label>
+    <label>Description <input name="description" required type="text" data-bind="value: newRequest().description"></label>
+    <label>Client <select name="client" required data-bind="options: clients, optionsText: 'name', value: newRequest().client, optionsCaption: 'Choose...'"></select></label>
+    <label>Product Area <select name="productArea" required data-bind="options: productAreas, optionsText: 'name', value: newRequest().productarea, optionsCaption: 'Choose...'" ></select></label>
+    <input type="submit" value="Add">
+    </form>
 
 </body>
 </html>

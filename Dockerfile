@@ -10,9 +10,9 @@ COPY requirements.txt /app/
 WORKDIR /app
 RUN pip install -r requirements.txt
 
-COPY . /app
 COPY --from=js /node_modules/knockout/build/output/knockout-latest.js /app/static/js/knockout.js
-COPY --from=js /swagger-js-3.8.13/browser/swagger-client.js /app/static/js/swagger-client.js
+COPY --from=js /swagger-js-3.8.13/browser/* /app/static/js/
+COPY . /app
 VOLUME /app/static/js
 ENV FLASK_APP=app.py FLASK_ENV=development
 CMD flask run -h 0.0.0.0
